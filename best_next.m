@@ -4,7 +4,7 @@ clc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Filming and plotting flags
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-plotting = true;
+plotting = false;
 filming  = false;
 
 if filming
@@ -12,7 +12,7 @@ if filming
 end
 
 % This flag determines if the planner stops when first target is destroyed
-static_on_contact = false;
+static_on_contact = true;
 
 
 % Generate heatmap of attrition rate
@@ -37,7 +37,7 @@ F = .001 + F./(10*max(max(F)));
 F = F';
 
 % Declare the number of agents and targets
-robots = 60;
+robots = 20;
 targets = 30;
 
 % Initialize the agents
@@ -166,10 +166,10 @@ while(i<n)
             if (static_on_contact)
                 contact = true;
             end
-            target_pk(tar) = -10;
+            target_pk(tar) = -0.000000000001;
             % Destoyed targets have a white fill color
             target_color(tar) = 'w';
-            disp('Target Destroyed');
+%            disp('Target Destroyed');
             target_status(tar) = 0;
             pk_at_destruction(tar) = 1-0.3625^world_state(tar);
         else
@@ -180,7 +180,7 @@ while(i<n)
         for c = length(contacting):-1:1
             % Destroy all robots that are within 1 meter o a target
             robot_array(contacting(c)) = [];
-            disp('Agent Destroyed');
+%            disp('Agent Destroyed');
         end
     end
     
@@ -209,7 +209,7 @@ while(i<n)
     
     % If all agents are destroyed, display the iteration number
     if length(robot_array)<1
-        i
+        i;
     end
 
 end
@@ -221,17 +221,37 @@ end
 if filming
     aviobj = close(aviobj);
 end
-sum(target_status)
+sum(target_status);
+
+
+high_destroyed = 0;
+low_destroyed = 0;
+
+for i = 1:30
+    if target_status(i) == 0
+        if (value(i) > 0.75)
+            high_destroyed = high_destroyed+1;
+        else
+            low_destroyed = low_destroyed+1;
+        end
+    end
+end
+high_destroyed/(high_destroyed+low_destroyed)
+            
 
 % Misc. ad hoc plots
+%plot(score)
+% Plot the value of each target and whether or not it was destroyed
 %{
 figure(2)
 plot(value)
 hold on
-plot(target_status,'r');
-figure(1)
+plot(target_status,'r.');
+%}
+%{
+% Plot the desired pk on each target & the pk at the time it was destroyed
+figure(2)
 plot(value)
 hold on
 plot(pk_at_destruction,'r.');
 %}
-plot(score)

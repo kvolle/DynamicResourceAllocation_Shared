@@ -2,21 +2,24 @@
 classdef agent < handle
     methods(Static)
         function score = get_score(state,target_pk)
-            %{ 
-            pk = zeros(1,length(state));
-             for i = 1:length(state)
-                pk(i) = 1- 0.3625^state(i);
-                if (pk(i) >= target_pk(i))
-                end
-            end
-            score = sum(abs(pk-target_pk));
-            %}
+            % Still experimenting with different scoring functions
+            % Current iteration is based on distance from desired Pk and a
+            % weighting factor based on the prority of each target (as
+            % expressed by desired Pk)
             score = 0;
+            %
+            for i = 1:length(state);
+                score = score + (target_pk(i)-1+0.3625^state(i))/(1-target_pk(i));
+            end
+            %}
+            %{
             for i = 1:length(state)
+                % Assumes 25% attrition rate for all agents
                 if ((1-0.3625^state(i))<target_pk(i))
                     score = score + target_pk(i) + 0.3625^state(i) - 1;
                 end
             end
+            %}
         end
     end
     methods
@@ -183,7 +186,7 @@ classdef agent < handle
             end
             if rand()<attrition_rate
                 destroyed = true;
-                disp('Agent Destroyed');
+                %disp('Agent Destroyed');
             else
                 destroyed = false;
             end
