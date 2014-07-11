@@ -37,8 +37,8 @@ F = .001 + F./(10*max(max(F)));
 F = F';
 
 % Declare the number of agents and targets
-robots = 6;
-targets = 3;
+robots = 30;
+targets = 15;
 
 % Initialize the agents
 targeted = -1*ones(1,robots);
@@ -57,10 +57,7 @@ for i = 1:robots
     targeted(i) = robot_array(i).Target;
     robot_array(i).get_model_cheat(robot_array(i).message_content,targets);
 end
-robot_array(4).Target
-robot_array(4).message_content
-robot_array(4).message_confidence
-% Generate initial model
+
 for i = 1:robots
     robot_array(i).get_model_cheat(targeted,targets);
 end
@@ -101,6 +98,12 @@ end
 
 tic
 contact = false;
+
+
+% Initialize inboxes
+inbox_message = zeros(length(robot_array),length(robot_array));
+inbox_confidence = zeros(length(robot_array),length(robot_array));
+inbox_location = zeros(2,length(robot_array));
 while(i<n)
     % Some plotting items
     if plotting
@@ -121,8 +124,8 @@ while(i<n)
     % makes decisions at 2 Hz
     if (~contact && errorExists)
         for j = 1:10
-            % Index backwards so destroying agents doesn't cause a problem
-            inbox_message = zeros(length(robot_array),targets);
+            clear inbox_message inbox_confidence inbox_location
+            inbox_message = zeros(length(robot_array),length(robot_array));
             inbox_confidence = zeros(length(robot_array),length(robot_array));
             inbox_location = zeros(2,length(robot_array));
             for r = 1:length(robot_array)
@@ -136,36 +139,47 @@ while(i<n)
                         robot_array(r).retarget_bn(target_loc,target_pk);
                         % Update ground truth model
                         targeted(r) = robot_array(r).Target;
+                        % Update robot's message
+                        robot_array(r).message_content(r) = robot_array(r).Target;
                     end
                 end
 
                 % One message per row
-                inbox_message(r,:) = robot_array(r).Model;
+                inbox_message(r,:) = robot_array(r).message_content;
                 % One confidence array per row;
                 inbox_confidence(r,:) = robot_array(r).message_confidence;
                 % One sender location per column
                 inbox_location(:,r) = robot_array(r).State(1:2);
-% TODO implement communication for getting information
-% Using ground truth in the interim
-%robot_array(r).get_model_cheat(targeted,targets);
+
                 % This is fine for now
                 % TODO implement/integrate path planning
                 robot_array(r).get_trajectory(target_loc);
+            end
+            for m=1:length(robot_array)
+                for l = 1:size(inbox_location,2)
+                    if (l~=m)
+                        % Checks if the squared distance to the sending
+                        % agent is within the communication radius squared
+                        if ((robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l))+ (robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l)) < 500)
+                            robot_array(m).receive_message(inbox_message(l,:),inbox_confidence(l,:));
+                        end
+                    end
+                end
             end
         end
     end 
 
     for r = length(robot_array):-1:1
-        for l = 1:size(inbox_location,2)
-            %if ((robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l))+ (robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l)) < 5000)
-                robot_array(r).receive_message(inbox_message(l,:),inbox_confidence(l,:));
-            %end
-        end
         robot_array(r).get_model_cheat(robot_array(r).message_content,targets);
         % Check if each agent is destroyed or not on this timestep
         if (robot_array(r).check_attrition(x1,x2,F))
+            for rc=1:length(robot_array)
+                robot_array(rc).message_content(r) = [];
+                robot_array(rc).message_confidence(r) = [];
+            end
             robot_array(r) = [];
             targeted(r) = [];
+            
         else
             % velocity_hack sets the current velocity to match desired
             robot_array(r).velocity_hack();
@@ -205,8 +219,15 @@ while(i<n)
             end
         end
         for c = length(contacting):-1:1
+            % Clean up the messages sent as they pertain to targets about
+            % to be destroyed
+            for rc = 1:length(robot_array)
+                robot_array(rc).message_content(c) = [];
+                robot_array(rc).message_confidence(c) = [];
+            end
             % Destroy all robots that are within 1 meter o a target
             robot_array(contacting(c)) = [];
+            targeted(contacting(c)) = [];
 %            disp('Agent Destroyed');
         end
     end
@@ -226,13 +247,6 @@ while(i<n)
             end
         end
     end
-%{
-disp('Agent');
-robot_array(1).Model
-disp('World');
-world_state
-%}
-%robot_array(1).message_confidence
     % Score is based on placeholder effectiveness and attrition values
     % TODO make the cost more accurate
     cost(i) = agent.get_cost(world_state,target_pk);

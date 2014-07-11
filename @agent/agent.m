@@ -150,7 +150,6 @@ classdef agent < handle
                 end
             end
             obj.Target = new_target;
-            obj.Model(obj.Target) = obj.Model(obj.Target) + 1;
         end
         
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -171,8 +170,8 @@ classdef agent < handle
         end
 
         function [] = receive_message(obj,message,confidence)
-            for i = 1:length(message)
-                if (confidence(i) < obj.message_confidence(i))
+            for i = 1:length(confidence)
+                if (confidence(i) <= obj.message_confidence(i))
                     obj.message_confidence(i) = confidence(i)+1;
                     obj.message_content(i) = message(i);
                 end
