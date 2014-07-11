@@ -4,7 +4,7 @@ clc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Filming and plotting flags
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-plotting = false;
+plotting = true;
 filming  = false;
 
 if filming
@@ -12,7 +12,7 @@ if filming
 end
 
 % This flag determines if the planner stops when first target is destroyed
-static_on_contact = true;
+static_on_contact = false;
 
 
 % Generate heatmap of attrition rate
@@ -37,17 +37,29 @@ F = .001 + F./(10*max(max(F)));
 F = F';
 
 % Declare the number of agents and targets
-robots = 20;
-targets = 30;
+robots = 6;
+targets = 3;
 
 % Initialize the agents
 targeted = -1*ones(1,robots);
+
 for i = 1:robots
     robot_array(i) = agent(i);
     robot_array(i).Target = ceil(rand()*targets);
+    for j=1:robots
+        robot_array(i).message_content(j) = 0;
+        robot_array(i).message_confidence(j) = Inf;
+    end
+    %robot_array(i).message_content(robot_array(i).Target) = 1;
+    robot_array(i).message_content(i) = robot_array(i).Target;
+    %robot_array(i).message_confidence(robot_array(i).Target) = 0;
+    robot_array(i).message_confidence(i) = 0;
     targeted(i) = robot_array(i).Target;
+    robot_array(i).get_model_cheat(robot_array(i).message_content,targets);
 end
-
+robot_array(4).Target
+robot_array(4).message_content
+robot_array(4).message_confidence
 % Generate initial model
 for i = 1:robots
     robot_array(i).get_model_cheat(targeted,targets);
@@ -78,9 +90,9 @@ i =0;
 n=200;
 
 % Score can be any of a numbber of metrics
-% For using the "best-next" approach, lower score is better
+% For using the "best-next" approach, lower cost is better
 % If you want to maximize a score, change the retarget_bn function
-score = zeros(1,n);
+cost = ones(1,n);
 
 % Change this next line to change name of output movie
 if filming
@@ -110,6 +122,9 @@ while(i<n)
     if (~contact && errorExists)
         for j = 1:10
             % Index backwards so destroying agents doesn't cause a problem
+            inbox_message = zeros(length(robot_array),targets);
+            inbox_confidence = zeros(length(robot_array),length(robot_array));
+            inbox_location = zeros(2,length(robot_array));
             for r = 1:length(robot_array)
                 % One out of every fifty agents has the potential to switch
                 % on a given timestep
@@ -124,9 +139,15 @@ while(i<n)
                     end
                 end
 
-                % TODO implement communication for getting information
-                % Using ground truth in the interim
-                robot_array(r).get_model_cheat(targeted,targets);
+                % One message per row
+                inbox_message(r,:) = robot_array(r).Model;
+                % One confidence array per row;
+                inbox_confidence(r,:) = robot_array(r).message_confidence;
+                % One sender location per column
+                inbox_location(:,r) = robot_array(r).State(1:2);
+% TODO implement communication for getting information
+% Using ground truth in the interim
+%robot_array(r).get_model_cheat(targeted,targets);
                 % This is fine for now
                 % TODO implement/integrate path planning
                 robot_array(r).get_trajectory(target_loc);
@@ -135,20 +156,26 @@ while(i<n)
     end 
 
     for r = length(robot_array):-1:1
-            % Check if each agent is destroyed or not on this timestep
-            if (robot_array(r).check_attrition(x1,x2,F))
-                robot_array(r) = [];
-                targeted(r) = [];
-            else
-                % velocity_hack sets the current velocity to match desired
-                robot_array(r).velocity_hack();
-                % RK4 integration of current state
-                robot_array(r).RK4();
-                if plotting
-                    % Draw the agents
-                    plot3(robot_array(r).State(1),robot_array(r).State(2),-robot_array(r).State(3),'rh');
-                end
+        for l = 1:size(inbox_location,2)
+            %if ((robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l))+ (robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l)) < 5000)
+                robot_array(r).receive_message(inbox_message(l,:),inbox_confidence(l,:));
+            %end
+        end
+        robot_array(r).get_model_cheat(robot_array(r).message_content,targets);
+        % Check if each agent is destroyed or not on this timestep
+        if (robot_array(r).check_attrition(x1,x2,F))
+            robot_array(r) = [];
+            targeted(r) = [];
+        else
+            % velocity_hack sets the current velocity to match desired
+            robot_array(r).velocity_hack();
+            % RK4 integration of current state
+            robot_array(r).RK4();
+            if plotting
+                % Draw the agents
+                plot3(robot_array(r).State(1),robot_array(r).State(2),-robot_array(r).State(3),'rh');
             end
+        end
     end
 
     for tar = length(target_loc):-1:1
@@ -199,12 +226,18 @@ while(i<n)
             end
         end
     end
-    
+%{
+disp('Agent');
+robot_array(1).Model
+disp('World');
+world_state
+%}
+%robot_array(1).message_confidence
     % Score is based on placeholder effectiveness and attrition values
-    % TODO make the score more accurate
-    score(i) = agent.get_score(world_state,target_pk);
-    if score(i) < 0.001
-        errorExists = false;
+    % TODO make the cost more accurate
+    cost(i) = agent.get_cost(world_state,target_pk);
+    if cost(i) < 0.001
+        %errorExists = false;
     end
     
     % If all agents are destroyed, display the iteration number
@@ -224,23 +257,10 @@ end
 sum(target_status);
 
 
-high_destroyed = 0;
-low_destroyed = 0;
-
-for i = 1:30
-    if target_status(i) == 0
-        if (value(i) > 0.75)
-            high_destroyed = high_destroyed+1;
-        else
-            low_destroyed = low_destroyed+1;
-        end
-    end
-end
-high_destroyed/(high_destroyed+low_destroyed)
-            
-
 % Misc. ad hoc plots
-%plot(score)
+%axis([0 30 -1 1])
+%hold on
+plot(cost)
 % Plot the value of each target and whether or not it was destroyed
 %{
 figure(2)

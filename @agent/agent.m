@@ -1,22 +1,24 @@
 % Point mass dynamics
 classdef agent < handle
     methods(Static)
-        function score = get_score(state,target_pk)
+        function cost = get_cost(state,target_pk)
             % Still experimenting with different scoring functions
             % Current iteration is based on distance from desired Pk and a
             % weighting factor based on the prority of each target (as
             % expressed by desired Pk)
-            score = 0;
+            cost = 0;
             %
             for i = 1:length(state);
-                score = score + (target_pk(i)-1+0.3625^state(i))/(1-target_pk(i));
+                if (1-0.3625^state(i) < target_pk(i))
+                    cost = cost + (target_pk(i)-1+0.3625^state(i))/(1-target_pk(i));
+                end
             end
             %}
             %{
             for i = 1:length(state)
                 % Assumes 25% attrition rate for all agents
                 if ((1-0.3625^state(i))<target_pk(i))
-                    score = score + target_pk(i) + 0.3625^state(i) - 1;
+                    cost = cost + target_pk(i) + 0.3625^state(i) - 1;
                 end
             end
             %}
@@ -27,13 +29,14 @@ classdef agent < handle
 %%% Constructor
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function obj = agent(ID)
+            % This function creates an object representing one agent
             % Indexing from 1
             obj.ID = ID;
             obj.Target = -1;
             % North, East, Down convention
             obj.State = [ceil(rand()*49);ceil(rand()*49);-50;0;0;0];
-            obj.Mass = 5; % 5 kg, placeholder mostly
-            obj.Force = [0;0;0];
+            obj.Mass = 5; % 5 kg, placeholder until more detailed dynamics
+            obj.Force = [0;0;0];% Current force exerted by actuators
         end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Dynamics and Controls Methods
@@ -63,14 +66,19 @@ classdef agent < handle
 
         end
         function [] = velocity_hack(obj)
+            % Eventually this will be replaced with a trajectory following
+            % control system when we move from point-mass dynamics to
+            % vehicle dynamics
             obj.State(4:6) = obj.Trajectory;
         end
         function dstate = stateDiff(obj, y)
+            % State differential equations
             dstate(1:3) = y(4:6);
             dstate(4:6) = (1/obj.Mass)*obj.Force;
             dstate = dstate';
         end
         function [] = RK4(obj)
+            % Runge-Kutta 4 Integrator at 10 Hz
             dt = 0.1;
             k1 = obj.stateDiff(obj.State);
             k2 = obj.stateDiff(obj.State+(dt/2)*k1);
@@ -82,6 +90,11 @@ classdef agent < handle
 %%% Planning Methods
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function retarget_sa(robot,target_loc,target_pk)
+            % Simulated Annealling approach
+            % Randomly selects new target with probability based on angle
+            % between heading and path to each target as well as number of
+            % agents targeting each target
+            robot.Model(robot.Target) = robot.Model(robot.Target)-1;
             for i = 1:length(target_loc)
                 candidate_targets(i) = i;
                 candidate_angle(i) = atan2(target_loc(2,i)-robot.location(2),target_loc(1,i)-robot.location(1))-robot.heading;
@@ -104,40 +117,47 @@ classdef agent < handle
             Q = rand();
             for i=1:length(probability)
                 if (Q<probability(i))
-                    robot.target = candidate_targets(i);
+                    robot.Target = candidate_targets(i);
+                    robot.Model(robot.Target) = robot.Model(robot.Target)+1;
                     return
                 end
             end
+            
         end
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
         function retarget_bn(obj,target_loc,target_pk)
+            % Best-next state, essentially a greedy local search
+            % This approach is based on the observation that each agent
+            % can only effect a very small percentage of the state space
+            
+            obj.Model(obj.Target) = obj.Model(obj.Target) - 1;
             for i = 1:length(target_loc)
                 candidate_targets(i) = i;
             end
             
-            %candidate_targets(robot.target) = [];
-            %score = zeros(1,length(candidate_targets));
-            max_score =Inf;
+            min_cost =Inf;
             new_target = obj.Target;
             for i = 1:length(candidate_targets)
                 
                 result = obj.Model;
                 result(obj.Target) = result(obj.Target)-1;
                 result(i) = result(i)+1;
-                score = agent.get_score(result,target_pk);
+                cost = agent.get_cost(result,target_pk);
 
-                if (score < max_score)
-                    max_score = score;
+                if (cost < min_cost)
+                    min_cost = cost;
                     new_target = i;
                 end
             end
             obj.Target = new_target;
+            obj.Model(obj.Target) = obj.Model(obj.Target) + 1;
         end
         
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Communication/Sensing Methods
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function get_model_cheat(obj,targeted,numTargets)
+            % This function just takes the model from ground truth
             obj.Model = zeros(1,numTargets);
             for t = 1:numTargets
                 for r = 1:length(targeted)
@@ -147,13 +167,20 @@ classdef agent < handle
                 end
             end
         end
-        function compose_message(obj,numTargets)
-            obj.message_model = obj.Model;
-            
+        function send_message(obj)
         end
-        function receive_message()
+
+        function [] = receive_message(obj,message,confidence)
+            for i = 1:length(message)
+                if (confidence(i) < obj.message_confidence(i))
+                    obj.message_confidence(i) = confidence(i)+1;
+                    obj.message_content(i) = message(i);
+                end
+            end
         end
+        
         function get_distances(obj, target_loc)
+            % Get distance to each target
             for i =1:length(target_loc)
                 obj.Distance(:,i) = target_loc(:,i)-obj.State(1:2); 
             end
@@ -201,7 +228,7 @@ classdef agent < handle
         Trajectory
         Model
         Distance
-        message_model
+        message_content
         message_confidence
     end
 end
