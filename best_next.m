@@ -5,7 +5,7 @@ clc
 %%% Filming and plotting flags
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 plotting = false;
-filming  = false;
+filming  = true;
 
 if filming
     plotting = true;
@@ -126,26 +126,38 @@ while(i<n)
     % makes decisions at 2 Hz
     if (~contact && errorExists)
         for j = 1:10
-            clear inbox_message inbox_confidence inbox_location
-            inbox_message = zeros(length(robot_array),length(robot_array));
-            inbox_confidence = zeros(length(robot_array),length(robot_array));
-            inbox_location = zeros(2,length(robot_array));
+            %clear inbox_message inbox_confidence inbox_location
+            %inbox_message = zeros(length(robot_array),length(robot_array));
+            %inbox_confidence = zeros(length(robot_array),length(robot_array));
+            %inbox_location = zeros(2,length(robot_array));
             for r = 1:length(robot_array)
-                % One out of every fifty agents has the potential to switch
-                % on a given timestep
-                if (mod(r,50) == magicNumber)
-
-                    robot_array(r).get_distances(target_loc);
-                    if (rand()<1/(1+exp(-.4*(robot_array(r).Distance(robot_array(r).Target)-5))))
-                        % Select the target that will give the best next state
-                        robot_array(r).retarget_bn(target_loc,target_pk);
-                        % Update ground truth model
-                        targeted(r) = robot_array(r).Target;
-                        % Update robot's message
-                        robot_array(r).message_content(r) = robot_array(r).Target;
+                if (robot_array(r).Status~=0)
+                    % One out of every fifty agents has the potential to switch
+                    % on a given timestep
+                    if (mod(r,50) == magicNumber)
+                        robot_array(r).get_distances(target_loc);
+                        if (rand()<1/(1+exp(-.4*(robot_array(r).Distance(robot_array(r).Target)-5))))
+                            % Get updated information only when about to make a
+                            % decision
+                            for l = 1:size(inbox_location,2)
+                                if (l~=r)
+                                    % Checks if the squared distance to the sending
+                                    % agent is within the communication radius squared
+                                    if ((robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l))+ (robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l)) < 100)
+                                        robot_array(r).receive_message(inbox_message(l,:),inbox_confidence(l,:));
+                                    end
+                                end                        
+                            end
+                            % Use updated information to update world model
+                            robot_array(r).get_model(robot_array(r).message_content,targets);
+                            % Select the target that will give the best next state
+                            robot_array(r).retarget_bn(target_loc,target_pk);
+                            % Update ground truth model
+                            targeted(r) = robot_array(r).Target;
+                            % Update robot's message
+                            robot_array(r).message_content(r) = robot_array(r).Target;
+                        end
                     end
-                end
-
                 % One message per row
                 inbox_message(r,:) = robot_array(r).message_content;
                 % One confidence array per row;
@@ -156,41 +168,34 @@ while(i<n)
                 % This is fine for now
                 % TODO implement/integrate path planning
                 robot_array(r).get_trajectory(target_loc);
-            end
-            for m=1:length(robot_array)
-                for l = 1:size(inbox_location,2)
-                    if (l~=m)
-                        % Checks if the squared distance to the sending
-                        % agent is within the communication radius squared
-                        if ((robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l))+ (robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l)) < 500)
-                            robot_array(m).receive_message(inbox_message(l,:),inbox_confidence(l,:));
-                        end
-                    end                        
-                end
+                end % Paired with status check
             end
         end
     end 
 
     for r = length(robot_array):-1:1
-        robot_array(r).get_model(robot_array(r).message_content,targets);
-        % Check if each agent is destroyed or not on this timestep
-        if (robot_array(r).check_attrition(x1,x2,F))
-            for rc=1:length(robot_array)
-                robot_array(rc).message_content(r) = [];
-                robot_array(rc).message_confidence(r) =[];
-            end
-            robot_array(r) = [];
-            %robot_array(r).Status = 0;
-            targeted(r) = [];
-            
-        else
-            % velocity_hack sets the current velocity to match desired
-            robot_array(r).velocity_hack();
-            % RK4 integration of current state
-            robot_array(r).RK4();
-            if plotting
-                % Draw the agents
-                plot3(robot_array(r).State(1),robot_array(r).State(2),-robot_array(r).State(3),'rh');
+        if (robot_array(r).Status~=0)
+            %robot_array(r).get_model(robot_array(r).message_content,targets);
+            % Check if each agent is destroyed or not on this timestep
+            if (robot_array(r).check_attrition(x1,x2,F))
+                for rc=1:length(robot_array)
+                    robot_array(rc).message_content(r) = NaN;
+                    robot_array(rc).message_confidence(r) =0;
+                end
+                robot_array(r).Status = 0;
+                targeted(r) = NaN;
+
+            else
+                % velocity_hack sets the current velocity to match desired
+                robot_array(r).velocity_hack();
+                % RK4 integration of current state
+                robot_array(r).RK4();
+                if plotting
+                    % Draw the agents
+                    if (robot_array(r).Status ~= 0)
+                        plot3(robot_array(r).State(1),robot_array(r).State(2),-robot_array(r).State(3),'rh');
+                    end
+                end
             end
         end
     end
@@ -199,8 +204,10 @@ while(i<n)
         contacting = [];
         for v = 1:length(robot_array)
             % Making a list of all agents within 1 meter of the target
-            if (norm(robot_array(v).State(1:3)-[target_loc(:,tar);0])<1)
-                contacting = [contacting;v];
+            if (robot_array(v).Status ~= 0)
+                if (norm(robot_array(v).State(1:3)-[target_loc(:,tar);0])<1)
+                    contacting = [contacting;v];
+                end
             end
         end
         % Assuming each weapon alone has an 85% chance of destroying the
@@ -225,13 +232,12 @@ while(i<n)
             % Clean up the messages sent as they pertain to targets about
             % to be destroyed
             for rc = 1:length(robot_array)
-                robot_array(rc).message_content(contacting(c)) = [];
-                robot_array(rc).message_confidence(contacting(c)) = [];
+                robot_array(rc).message_content(contacting(c)) = NaN;
+                robot_array(rc).message_confidence(contacting(c)) = 0;
             end
             % Destroy all robots that are within 1 meter o a target
-            robot_array(contacting(c)) = [];
-            %robot_array(contacting(c)).Status = 0;
-            targeted(contacting(c)) = [];
+            robot_array(contacting(c)).Status = 0;
+            targeted(contacting(c)) = NaN;
 %            disp('Agent Destroyed');
         end
     end
@@ -252,7 +258,7 @@ while(i<n)
         end
     end
     
-  %{  
+  %{
     disp('Agent');
     robot_array(1).message_content
     disp('World');

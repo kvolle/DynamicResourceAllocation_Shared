@@ -37,6 +37,7 @@ classdef agent < handle
             obj.State = [ceil(rand()*49);ceil(rand()*49);-50;0;0;0];
             obj.Mass = 5; % 5 kg, placeholder until more detailed dynamics
             obj.Force = [0;0;0];% Current force exerted by actuators
+            obj.Status = 1; % Target has not been destroyed
         end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Dynamics and Controls Methods
@@ -229,6 +230,7 @@ classdef agent < handle
         Distance
         message_content
         message_confidence
+        Status
     end
 end
             
