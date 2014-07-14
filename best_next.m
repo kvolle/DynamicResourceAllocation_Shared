@@ -4,7 +4,7 @@ clc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Filming and plotting flags
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-plotting = true;
+plotting = false;
 filming  = false;
 
 if filming
@@ -37,8 +37,8 @@ F = .001 + F./(10*max(max(F)));
 F = F';
 
 % Declare the number of agents and targets
-robots = 30;
-targets = 15;
+robots = 60;
+targets = 30;
 
 % Initialize the agents
 targeted = -1*ones(1,robots);
@@ -55,12 +55,14 @@ for i = 1:robots
     %robot_array(i).message_confidence(robot_array(i).Target) = 0;
     robot_array(i).message_confidence(i) = 0;
     targeted(i) = robot_array(i).Target;
-    robot_array(i).get_model_cheat(robot_array(i).message_content,targets);
+    robot_array(i).get_model(robot_array(i).message_content,targets);
 end
 
+%{
 for i = 1:robots
     robot_array(i).get_model_cheat(targeted,targets);
 end
+%}
 
 % Place the targets
 % Consider destroying targets with a probability based on PK
@@ -163,21 +165,22 @@ while(i<n)
                         if ((robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l))+ (robot_array(m).State(1)-inbox_location(1,l))*(robot_array(m).State(1)-inbox_location(1,l)) < 500)
                             robot_array(m).receive_message(inbox_message(l,:),inbox_confidence(l,:));
                         end
-                    end
+                    end                        
                 end
             end
         end
     end 
 
     for r = length(robot_array):-1:1
-        robot_array(r).get_model_cheat(robot_array(r).message_content,targets);
+        robot_array(r).get_model(robot_array(r).message_content,targets);
         % Check if each agent is destroyed or not on this timestep
         if (robot_array(r).check_attrition(x1,x2,F))
             for rc=1:length(robot_array)
                 robot_array(rc).message_content(r) = [];
-                robot_array(rc).message_confidence(r) = [];
+                robot_array(rc).message_confidence(r) =[];
             end
             robot_array(r) = [];
+            %robot_array(r).Status = 0;
             targeted(r) = [];
             
         else
@@ -222,17 +225,18 @@ while(i<n)
             % Clean up the messages sent as they pertain to targets about
             % to be destroyed
             for rc = 1:length(robot_array)
-                robot_array(rc).message_content(c) = [];
-                robot_array(rc).message_confidence(c) = [];
+                robot_array(rc).message_content(contacting(c)) = [];
+                robot_array(rc).message_confidence(contacting(c)) = [];
             end
             % Destroy all robots that are within 1 meter o a target
             robot_array(contacting(c)) = [];
+            %robot_array(contacting(c)).Status = 0;
             targeted(contacting(c)) = [];
 %            disp('Agent Destroyed');
         end
     end
-    
     if filming
+        
         Frame = getframe(fig);
         aviobj = addframe(aviobj,Frame);
     end
@@ -247,6 +251,13 @@ while(i<n)
             end
         end
     end
+    
+  %{  
+    disp('Agent');
+    robot_array(1).message_content
+    disp('World');
+    targeted
+%}
     % Score is based on placeholder effectiveness and attrition values
     % TODO make the cost more accurate
     cost(i) = agent.get_cost(world_state,target_pk);

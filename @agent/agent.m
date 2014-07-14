@@ -155,7 +155,7 @@ classdef agent < handle
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Communication/Sensing Methods
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        function get_model_cheat(obj,targeted,numTargets)
+        function get_model(obj,targeted,numTargets)
             % This function just takes the model from ground truth
             obj.Model = zeros(1,numTargets);
             for t = 1:numTargets
