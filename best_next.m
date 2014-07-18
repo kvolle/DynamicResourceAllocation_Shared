@@ -5,7 +5,7 @@ clc
 %%% Filming and plotting flags
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 plotting = false;
-filming  = true;
+filming  = false;
 
 if filming
     plotting = true;
@@ -37,8 +37,8 @@ F = .001 + F./(10*max(max(F)));
 F = F';
 
 % Declare the number of agents and targets
-robots = 60;
-targets = 30;
+robots = 30;
+targets = 15;
 
 % Initialize the agents
 targeted = -1*ones(1,robots);
@@ -101,7 +101,7 @@ end
 tic
 contact = false;
 
-
+ERROR=[];
 % Initialize inboxes
 inbox_message = zeros(length(robot_array),length(robot_array));
 inbox_confidence = zeros(length(robot_array),length(robot_array));
@@ -137,17 +137,6 @@ while(i<n)
                     if (mod(r,50) == magicNumber)
                         robot_array(r).get_distances(target_loc);
                         if (rand()<1/(1+exp(-.4*(robot_array(r).Distance(robot_array(r).Target)-5))))
-                            % Get updated information only when about to make a
-                            % decision
-                            for l = 1:size(inbox_location,2)
-                                if (l~=r)
-                                    % Checks if the squared distance to the sending
-                                    % agent is within the communication radius squared
-                                    if ((robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l))+ (robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l)) < 100)
-                                        robot_array(r).receive_message(inbox_message(l,:),inbox_confidence(l,:));
-                                    end
-                                end                        
-                            end
                             % Use updated information to update world model
                             robot_array(r).get_model(robot_array(r).message_content,targets);
                             % Select the target that will give the best next state
@@ -169,6 +158,19 @@ while(i<n)
                 % TODO implement/integrate path planning
                 robot_array(r).get_trajectory(target_loc);
                 end % Paired with status check
+            end
+            for r =1:length(robot_array)
+                % Get updated information only when about to make a
+                % decision
+                for l = 1:size(inbox_location,2)
+                    if (l~=r)
+                        % Checks if the squared distance to the sending
+                        % agent is within the communication radius squared
+                        if ((robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l))+ (robot_array(r).State(1)-inbox_location(1,l))*(robot_array(r).State(1)-inbox_location(1,l)) < 100)
+                            robot_array(r).receive_message(inbox_message(l,:),inbox_confidence(l,:));
+                        end
+                    end                        
+                end
             end
         end
     end 
@@ -223,6 +225,7 @@ while(i<n)
 %            disp('Target Destroyed');
             target_status(tar) = 0;
             pk_at_destruction(tar) = 1-0.3625^world_state(tar);
+            i
         else
             if plotting
                 plot3(target_loc(1,tar),target_loc(2,tar),0,'h','MarkerFaceColor',target_color(tar));
